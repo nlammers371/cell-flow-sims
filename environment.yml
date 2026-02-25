@@ -1,0 +1,17 @@
+name: cell-flow-sims
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.9
+  - numpy
+  - pandas
+  - pyyaml
+  - pytest
+  - napari
+  - qtpy
+  - pyqt
+  - magicgui
+  - jupyter
+  - pip
+  - pip:
+      - -e .
