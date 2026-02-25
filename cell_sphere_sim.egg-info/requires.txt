@@ -1,0 +1,9 @@
+numpy
+pandas
+pyyaml
+napari
+qtpy
+magicgui
+
+[test]
+pytest

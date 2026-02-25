@@ -27,6 +27,9 @@ def apply_divisions(
     state_id: np.ndarray,
     state_vars: np.ndarray,
     paused_until: np.ndarray,
+    track_id: np.ndarray,
+    parent_id: np.ndarray,
+    next_track_id: int,
     t: float,
     behavior: BehaviorParams,
     R_E: float,
@@ -34,24 +37,48 @@ def apply_divisions(
     rng: np.random.Generator,
     dt: float = 1.0,
     eps: float = 1e-12,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    int,
+    np.ndarray,
+]:
     """Apply stochastic divisions to cells and insert daughters.
 
     Daughters inherit state_id and state_vars exactly. The split distance is
     split_scale * (2 * R_i), i.e., a fraction of the equal-radius sigma.
     """
     divide_mask = sample_divisions(behavior.lambda_div, dt=dt, rng=rng)
-    if not np.any(divide_mask):
-        return x, p, state_id, state_vars, paused_until
+    div_idx = np.where(divide_mask)[0]
+    if div_idx.size == 0:
+        return x, p, state_id, state_vars, paused_until, track_id, parent_id, next_track_id, div_idx
 
     N = x.shape[0]
-    new_x = [x]
-    new_p = [p]
-    new_state_id = [state_id]
-    new_state_vars = [state_vars]
-    new_paused = [paused_until]
+    n_div = int(div_idx.size)
+    out_N = N + n_div
 
-    for i in np.where(divide_mask)[0]:
+    x_out = np.empty((out_N, 3), dtype=x.dtype)
+    p_out = np.empty((out_N, 3), dtype=p.dtype)
+    state_id_out = np.empty((out_N,), dtype=state_id.dtype)
+    state_vars_out = np.empty((out_N, state_vars.shape[1]), dtype=state_vars.dtype)
+    paused_out = np.empty((out_N,), dtype=paused_until.dtype)
+    track_id_out = np.empty((out_N,), dtype=track_id.dtype)
+    parent_id_out = np.empty((out_N,), dtype=parent_id.dtype)
+
+    x_out[:N] = x
+    p_out[:N] = p
+    state_id_out[:N] = state_id
+    state_vars_out[:N] = state_vars
+    paused_out[:N] = paused_until
+    track_id_out[:N] = track_id
+    parent_id_out[:N] = parent_id
+
+    for k, i in enumerate(div_idx):
         n = x[i] / R_E
         axis = _random_tangent_unit(n, rng, eps)
         s = split_scale * (2.0 * behavior.R[i])
@@ -70,20 +97,28 @@ def apply_divisions(
         tau = behavior.tau_div[i]
         paused = max(paused_until[i], t + tau)
 
-        # Update mother slot in-place, append daughter
-        x[i] = xi
-        p[i] = p_i
-        paused_until[i] = paused
+        x_out[i] = xi
+        p_out[i] = p_i
+        paused_out[i] = paused
 
-        new_x.append(xj[None, :])
-        new_p.append(p_j[None, :])
-        new_state_id.append(state_id[i][None])
-        new_state_vars.append(state_vars[i][None, :])
-        new_paused.append(np.array([paused], dtype=paused_until.dtype))
+        out_i = N + k
+        x_out[out_i] = xj
+        p_out[out_i] = p_j
+        state_id_out[out_i] = state_id[i]
+        state_vars_out[out_i] = state_vars[i]
+        paused_out[out_i] = paused
+        track_id_out[out_i] = next_track_id + k
+        parent_id_out[out_i] = track_id[i]
 
-    x_out = np.vstack(new_x)
-    p_out = np.vstack(new_p)
-    state_id_out = np.concatenate(new_state_id)
-    state_vars_out = np.vstack(new_state_vars)
-    paused_out = np.concatenate(new_paused)
-    return x_out, p_out, state_id_out, state_vars_out, paused_out
+    next_track_id_out = next_track_id + n_div
+    return (
+        x_out,
+        p_out,
+        state_id_out,
+        state_vars_out,
+        paused_out,
+        track_id_out,
+        parent_id_out,
+        next_track_id_out,
+        div_idx,
+    )

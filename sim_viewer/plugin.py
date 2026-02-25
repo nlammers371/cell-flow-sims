@@ -97,7 +97,7 @@ def _build_engine(rng: np.random.Generator, n_cells: int, R_E: float, dt: float)
         alpha_dmin=0.2,
         eps=1e-8,
         dt=dt,
-        neighbor_cell_size=1.0,
+        neighbor_radius_buffer=0.1,
         record_interval=1,
         division_enabled=False,
     )

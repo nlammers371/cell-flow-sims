@@ -48,7 +48,7 @@ def main() -> None:
         alpha_dmin=0.2,
         eps=1e-8,
         dt=0.01,
-        neighbor_cell_size=1.0,
+        neighbor_radius_buffer=0.1,
         record_interval=1,
         division_enabled=False,
     )

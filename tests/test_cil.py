@@ -8,7 +8,6 @@ from cell_sphere_sim.state import BehaviorParams
 def test_cil_flee_direction():
     R_E = 10.0
     x = np.array([[0.0, 0.0, R_E], [0.0, 0.5, R_E]], dtype=float)
-    state_id = np.array([0, 0], dtype=np.int32)
     behavior = BehaviorParams(
         R=np.array([1.0, 1.0]),
         Fm=np.array([0.0, 0.0]),
@@ -19,15 +18,16 @@ def test_cil_flee_direction():
         tau_div=np.array([0.0, 0.0]),
     )
 
-    candidates = [(0, 1)]
+    i_idx = np.array([0], dtype=np.int32)
+    j_idx = np.array([1], dtype=np.int32)
     _, metrics = compute_contact_forces_and_metrics(
         x,
-        state_id,
         behavior,
         k_rep=1.0,
         alpha_dmin=0.2,
         eps=1e-8,
-        candidate_pairs=candidates,
+        i_idx=i_idx,
+        j_idx=j_idx,
         R_E=R_E,
     )
 
@@ -43,7 +43,8 @@ def test_cil_flee_direction():
 
 def test_cil_relaxation_moves_toward_target():
     p = np.array([[1.0, 0.0, 0.0]])
-    p_flee = np.array([[-1.0, 0.0, 0.0]])
+    # Avoid exact antipodes so normalization does not collapse progress.
+    p_flee = np.array([[-0.5, 0.8660254, 0.0]])
     fcil = 2.0
     dt = 0.1
 

@@ -11,6 +11,8 @@ dependencies = [
   "numpy",
   "pandas",
   "pyyaml",
+  "scipy",
+  "tqdm",
   "napari",
   "qtpy",
   "magicgui",

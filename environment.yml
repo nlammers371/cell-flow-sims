@@ -2,11 +2,14 @@ name: cell-flow-sims
 channels:
   - conda-forge
 dependencies:
-  - python>=3.9
+  - python=3.11
   - numpy
   - pandas
   - pyyaml
   - pytest
+  - scipy
+  - tqdm
+  - matplotlib
   - napari
   - qtpy
   - pyqt
