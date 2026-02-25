@@ -1,0 +1,12 @@
+R_E: 10.0
+gamma_s: 1.0
+k_rep: 2.0
+alpha_dmin: 0.2
+eps: 1e-8
+dt: 0.01
+neighbor_cell_size: 1.0
+record_interval: 1
+division_enabled: false
+split_scale: 0.5
+relax_substeps: 5
+relax_dt_scale: 0.2

@@ -1,0 +1,11 @@
+name: sim_viewer
+schema_version: 0.2.0
+display_name: Cell Sphere Sim
+contributions:
+  commands:
+    - id: sim_viewer.make_dock_widget
+      title: Cell Sphere Sim
+      python_name: sim_viewer.plugin:make_dock_widget
+  widgets:
+    - command: sim_viewer.make_dock_widget
+      display_name: Cell Sphere Sim

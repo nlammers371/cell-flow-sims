@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cell-sphere-sim"
+version = "0.1.0"
+description = "Cell dynamics simulator on a sphere (Phase 1)"
+requires-python = ">=3.9"
+dependencies = [
+  "numpy",
+  "pandas",
+  "pyyaml",
+  "napari",
+  "qtpy",
+  "magicgui",
+]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[project.entry-points."napari.manifest"]
+sim_viewer = "sim_viewer:napari.yaml"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["cell_sphere_sim*", "sim_viewer*"]
+
+[tool.setuptools.package-data]
+sim_viewer = ["napari.yaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
