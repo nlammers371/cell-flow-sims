@@ -10,7 +10,7 @@ Backend Revision 2 (in progress)
 ---
 
 ## Current Focus
-GUI stabilization (napari-only improvements)
+Phase 3 visualization planning (Phase 2 complete)
 
 ---
 
@@ -31,10 +31,10 @@ GUI stabilization (napari-only improvements)
 ## Known Issues
 
 ### GUI
-- [ ] Points shading not set to spherical
-- [ ] Surface mesh rendered at same radius as physics sphere
-- [ ] Points/surface occlusion awkward at certain angles
-- [ ] No consistent visual language between mesh + tracks
+- [x] Points shading set to spherical
+- [x] Surface mesh rendered with a reduced display radius
+- [x] Points/surface occlusion improved via mesh opacity and styling
+- [x] Consistent visual language between mesh + tracks via shared state coloring
 
 ### Backend
 - [ ] No profiling results recorded for N=1k–5k
@@ -53,11 +53,7 @@ GUI stabilization (napari-only improvements)
 
 ## Next Milestone
 
-Napari-only polish:
-1. Enable spherical shading
-2. Shrink display sphere radius slightly
-3. Clean density shading
-4. Re-evaluate aesthetics before considering PyVista
+Phase 2 complete. Next: evaluate optional Phase 3 visualization upgrades.
 
 ---
 

@@ -12,11 +12,12 @@
 
 ---
 
-## Phase 2 — GUI Stabilization (Current)
+## Phase 2 — GUI Stabilization (Complete)
 - Napari spherical shading
 - Surface radius display fix
 - Density shading improvements
 - Diagnostics improvements
+- Tracks-layer integration for simulated cells
 
 ---
 

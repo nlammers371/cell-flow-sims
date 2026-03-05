@@ -88,3 +88,9 @@ napari
 ```
 
 In napari: Plugins -> Cell Sphere Sim.
+
+The dock widget now renders:
+- spherical-shaded cell points
+- a slightly smaller context surface with normalized density shading
+- a live Tracks layer (`track_id, t, z, y, x`) colored by `state_id`
+- per-step diagnostics (cell count, speed, contacts, minimum contact distance)
