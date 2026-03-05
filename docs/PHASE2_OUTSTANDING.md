@@ -4,18 +4,17 @@ This note summarizes what remains in **Phase 2 — GUI Stabilization** from `ROA
 
 ## Outstanding from roadmap
 
-The following roadmap items are still outstanding:
+Phase 2 roadmap items have now been implemented:
 
 1. Napari spherical shading
 2. Surface radius display fix
 3. Density shading improvements
 4. Diagnostics improvements
+5. Tracks-layer integration for simulated cells
 
 ## Clarified deliverable requested
 
-In addition to the items above, include a concrete integration target:
-
-5. Ensure backend simulation outputs are consumable as **tracks-layer objects**, and ensure the GUI displays simulated cells through a napari Tracks layer representation where appropriate.
+The integration target is now met: backend simulation outputs are consumed as **tracks-layer objects**, and the GUI displays simulated cells through a napari Tracks layer representation.
 
 ## Traceability to current status docs
 
@@ -26,4 +25,4 @@ Current GUI issues already indicate incomplete visual consistency and rendering 
 - Points/surface occlusion awkward at certain angles
 - No consistent visual language between mesh + tracks
 
-These reinforce that Phase 2 is still in-progress and not yet complete.
+These issues have been addressed by the Phase 2 GUI stabilization update.

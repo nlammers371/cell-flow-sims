@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import numpy as np
+import pandas as pd
 
 from qtpy.QtCore import QTimer
 from qtpy.QtWidgets import (
@@ -23,10 +24,14 @@ from cell_sphere_sim.state import StateTable
 class _UiState:
     engine: SimulationEngine | None
     points_layer: object | None
+    tracks_layer: object | None
     vectors_layer: object | None
     surface_layer: object | None
+    diagnostics_label: QLabel
     timer: QTimer
     t: float
+    frame: int
+    tracks_df: pd.DataFrame
 
 
 def _random_points_on_sphere(rng: np.random.Generator, n: int, R_E: float) -> np.ndarray:
@@ -72,6 +77,29 @@ def _density_on_vertices(verts: np.ndarray, x: np.ndarray, R_E: float, sigma: fl
     dots = v_unit @ x_unit.T
     weights = np.exp((dots - 1.0) / max(sigma, 1e-6))
     return weights.sum(axis=1)
+
+
+def _normalize_density(values: np.ndarray) -> np.ndarray:
+    if values.size == 0:
+        return values
+    lo, hi = np.percentile(values, [5.0, 95.0])
+    if hi <= lo:
+        return np.zeros_like(values)
+    norm = (values - lo) / (hi - lo)
+    return np.clip(norm, 0.0, 1.0)
+
+
+def _tracks_dataframe(track_id: np.ndarray, frame: int, x: np.ndarray, state_id: np.ndarray) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "track_id": track_id.astype(np.int64),
+            "t": np.full((x.shape[0],), frame, dtype=np.int32),
+            "z": x[:, 2],
+            "y": x[:, 1],
+            "x": x[:, 0],
+            "state_id": state_id.astype(np.int32),
+        }
+    )
 
 
 def _build_engine(rng: np.random.Generator, n_cells: int, R_E: float, dt: float) -> SimulationEngine:
@@ -147,6 +175,14 @@ def make_dock_widget(viewer):
     sphere_res.setValue(24)
     row3.addWidget(sphere_res)
 
+    row3.addWidget(QLabel("Display radius"))
+    display_radius_scale = QDoubleSpinBox()
+    display_radius_scale.setDecimals(3)
+    display_radius_scale.setRange(0.8, 1.0)
+    display_radius_scale.setSingleStep(0.01)
+    display_radius_scale.setValue(0.97)
+    row3.addWidget(display_radius_scale)
+
     density_toggle = QCheckBox("Density shading")
     density_toggle.setChecked(True)
     row3.addWidget(density_toggle)
@@ -170,17 +206,50 @@ def make_dock_widget(viewer):
     row4.addWidget(btn_reset)
     layout.addLayout(row4)
 
+    diagnostics_label = QLabel("Diagnostics: ready")
+    layout.addWidget(diagnostics_label)
+
     widget.setLayout(layout)
 
     timer = QTimer()
     timer.setInterval(30)
-    state = _UiState(engine=None, points_layer=None, vectors_layer=None, surface_layer=None, timer=timer, t=0.0)
+    state = _UiState(
+        engine=None,
+        points_layer=None,
+        tracks_layer=None,
+        vectors_layer=None,
+        surface_layer=None,
+        diagnostics_label=diagnostics_label,
+        timer=timer,
+        t=0.0,
+        frame=0,
+        tracks_df=pd.DataFrame(columns=["track_id", "t", "z", "y", "x", "state_id"]),
+    )
+
+    def _set_diag_text(diag: dict | None = None):
+        if diag is None:
+            diagnostics_label.setText("Diagnostics: ready")
+            return
+        diagnostics_label.setText(
+            " | ".join(
+                [
+                    f"n={diag['n_cells']}",
+                    f"speed={diag['mean_speed']:.3f}",
+                    f"contacts={diag['mean_contacts']:.2f}",
+                    f"pairs={diag['n_contact_pairs']}",
+                    f"min_d={diag['min_d_contact']:.3f}",
+                ]
+            )
+        )
 
     def _init_layers():
         rng = np.random.default_rng(seed.value())
         engine = _build_engine(rng, n_cells.value(), 10.0, dt.value())
         state.engine = engine
         state.t = 0.0
+        state.frame = 0
+        state.tracks_df = _tracks_dataframe(engine.track_id, state.frame, engine.x, engine.state_id)
+        _set_diag_text(None)
 
         points = engine.x
         features = {"state_id": engine.state_id}
@@ -191,10 +260,24 @@ def make_dock_widget(viewer):
                 features=features,
                 face_color="state_id",
                 face_colormap="tab10",
+                shading="spherical",
             )
         else:
             state.points_layer.data = points
             state.points_layer.features = features
+            state.points_layer.shading = "spherical"
+
+        if state.tracks_layer is None:
+            state.tracks_layer = viewer.add_tracks(
+                state.tracks_df[["track_id", "t", "z", "y", "x"]].to_numpy(dtype=float),
+                features=state.tracks_df[["state_id"]],
+                color_by="state_id",
+                colormap="tab10",
+                tail_length=40,
+            )
+        else:
+            state.tracks_layer.data = state.tracks_df[["track_id", "t", "z", "y", "x"]].to_numpy(dtype=float)
+            state.tracks_layer.features = state.tracks_df[["state_id"]]
 
         vec_data = np.stack([engine.x, engine.x + vscale.value() * engine.p], axis=1)
         if state.vectors_layer is None:
@@ -202,12 +285,16 @@ def make_dock_widget(viewer):
         else:
             state.vectors_layer.data = vec_data
 
-        verts, faces = _make_uv_sphere(sphere_res.value(), sphere_res.value() * 2, 10.0)
+        verts, faces = _make_uv_sphere(
+            sphere_res.value(),
+            sphere_res.value() * 2,
+            10.0 * display_radius_scale.value(),
+        )
         values = np.zeros((verts.shape[0],), dtype=float)
         if density_toggle.isChecked():
-            values = _density_on_vertices(verts, engine.x, 10.0, sigma.value())
+            values = _normalize_density(_density_on_vertices(verts, engine.x, 10.0, sigma.value()))
         if state.surface_layer is None:
-            state.surface_layer = viewer.add_surface((verts, faces, values), colormap="viridis")
+            state.surface_layer = viewer.add_surface((verts, faces, values), colormap="viridis", opacity=0.35)
         else:
             state.surface_layer.data = (verts, faces, values)
 
@@ -218,18 +305,25 @@ def make_dock_widget(viewer):
         vec_data = np.stack([engine.x, engine.x + vscale.value() * engine.p], axis=1)
         state.points_layer.data = engine.x
         state.points_layer.features = {"state_id": engine.state_id}
+        state.points_layer.shading = "spherical"
         state.vectors_layer.data = vec_data
+        state.frame += 1
+        frame_df = _tracks_dataframe(engine.track_id, state.frame, engine.x, engine.state_id)
+        state.tracks_df = pd.concat([state.tracks_df, frame_df], ignore_index=True)
+        state.tracks_layer.data = state.tracks_df[["track_id", "t", "z", "y", "x"]].to_numpy(dtype=float)
+        state.tracks_layer.features = state.tracks_df[["state_id"]]
         if density_toggle.isChecked():
             verts = state.surface_layer.data[0]
-            values = _density_on_vertices(verts, engine.x, 10.0, sigma.value())
+            values = _normalize_density(_density_on_vertices(verts, engine.x, 10.0, sigma.value()))
             state.surface_layer.data = (state.surface_layer.data[0], state.surface_layer.data[1], values)
 
     def _step_once():
         if state.engine is None:
             _init_layers()
-        state.engine.step(state.t)
+        diag = state.engine.step(state.t)
         state.t += dt.value()
         _update_layers()
+        _set_diag_text(diag)
 
     def _start():
         if state.engine is None:
@@ -248,9 +342,10 @@ def make_dock_widget(viewer):
     def _on_timer():
         if state.engine is None:
             return
-        state.engine.step(state.t)
+        diag = state.engine.step(state.t)
         state.t += dt.value()
         _update_layers()
+        _set_diag_text(diag)
 
     timer.timeout.connect(_on_timer)
     btn_step.clicked.connect(_step_once)
