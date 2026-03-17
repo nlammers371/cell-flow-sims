@@ -21,8 +21,8 @@ class SimParams:
     alpha_dmin: float
     eps: float
     dt: float | None
+    record_interval: int = 1
     neighbor_radius_buffer: float = 0.1
-    record_interval: int
     division_enabled: bool = True
     split_scale: float = 0.5
     relax_substeps: int = 5

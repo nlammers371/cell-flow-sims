@@ -97,9 +97,16 @@ def apply_divisions(
         tau = behavior.tau_div[i]
         paused = max(paused_until[i], t + tau)
 
+        old_tid = track_id[i]
+        # Both daughters receive new track_ids; the original track ends at division.
+        tid_a = next_track_id + 2 * k
+        tid_b = next_track_id + 2 * k + 1
+
         x_out[i] = xi
         p_out[i] = p_i
         paused_out[i] = paused
+        track_id_out[i] = tid_a
+        parent_id_out[i] = old_tid
 
         out_i = N + k
         x_out[out_i] = xj
@@ -107,10 +114,10 @@ def apply_divisions(
         state_id_out[out_i] = state_id[i]
         state_vars_out[out_i] = state_vars[i]
         paused_out[out_i] = paused
-        track_id_out[out_i] = next_track_id + k
-        parent_id_out[out_i] = track_id[i]
+        track_id_out[out_i] = tid_b
+        parent_id_out[out_i] = old_tid
 
-    next_track_id_out = next_track_id + n_div
+    next_track_id_out = next_track_id + 2 * n_div
     return (
         x_out,
         p_out,
