@@ -1,2 +1,0 @@
-[napari.manifest]
-sim_viewer = sim_viewer:napari.yaml
