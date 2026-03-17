@@ -33,3 +33,8 @@ sim_viewer = ["napari.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.2",
+]

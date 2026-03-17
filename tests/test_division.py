@@ -60,8 +60,14 @@ def test_division_inserts_daughter_and_inherits_state():
     assert div_idx.size == 1
     assert track_id2.shape[0] == 2
     assert parent_id2.shape[0] == 2
-    assert next_track_id2 == next_track_id + 1
+    # Both daughters receive new track_ids; 2 IDs consumed per division event.
+    assert next_track_id2 == next_track_id + 2
+    # Both daughters (slot 0 and slot 1) have parent_id = original track_id[0]
+    assert parent_id2[0] == track_id[0]
     assert parent_id2[1] == track_id[0]
+    # Neither daughter keeps the original track_id
+    assert track_id2[0] != track_id[0]
+    assert track_id2[1] != track_id[0]
 
     gate = (0.0 >= paused2).astype(float)
     v = gate[:, None] * behavior.Fm[0] * p2
