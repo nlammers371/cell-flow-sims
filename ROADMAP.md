@@ -1,42 +1,42 @@
 # Development Roadmap
 
----
+## Phase 1 — Spherical core mechanics (complete)
 
-## Phase 1 — Core Mechanics (Complete)
-- Sphere geometry
-- Vectorized forces
-- CIL
-- Division
-- Initialization
-- Tracks output
+- Sphere geometry and parallel transport
+- Vectorized forces and CIL
+- State hooks, division, and lineage
+- Initialization and track outputs
 
----
+## Phase 2 — Napari GUI stabilization (complete)
 
-## Phase 2 — GUI Stabilization (Complete)
-- Napari spherical shading
-- Surface radius display fix
-- Density shading improvements
-- Diagnostics improvements
-- Tracks-layer integration for simulated cells
+- Spherical point shading and context surface
+- Density shading and diagnostics
+- Tracks-layer integration
 
----
+## Phase 3 — Periodic 2D reference path (MVP complete)
 
-## Phase 3 — Visualization Upgrade (Optional)
-- Embed PyVista dock widget
-- True sphere glyph rendering
-- Improved lighting + occlusion
-- Napari–PyVista synchronization
+- Rectangular periodic engine and minimum-image mechanics
+- Conservative heterogeneous initialization
+- Collective metrics and unwrapped displacement
+- Interactive/headless Matplotlib sandbox
+- Sphere/plane force parity and regression tests
 
----
+## Phase 4 — Planar exploration and sphere validation (current priority)
 
-## Phase 4 — Field Coupling
+- Establish reference parameter sets for collective regimes
+- Add repeatable parameter sweep and result aggregation workflows
+- Profile 500–5,000-cell planar runs
+- Compare planar results with low-curvature spherical simulations
+- Decide which diagnostics and output conventions should be shared
+
+## Phase 5 — Field coupling
+
 - PDE solver integration
-- Cell-source/sink coupling
+- Cell source/sink coupling
 - State transition dynamics
 
----
+## Optional later work — 3D visualization upgrades
 
-## Phase 5 — Sweep Infrastructure
-- Batch parameter runs
-- Result aggregation
-- Summary plots
+- Evaluate true sphere glyph rendering if Napari becomes insufficient
+- Consider embedded PyVista only after the planar validation workflow matures
+- Improve lighting and occlusion without changing backend mechanics

@@ -1,10 +1,10 @@
-# Architecture Overview — Cell Sphere Simulator
+# Architecture Overview — Cell Flow Simulations
 
 This document describes how the system is structured and why.
 
 ---
 
-# 1. Backend Engine
+# 1. Spherical Backend Engine
 
 ## Core State
 
@@ -65,7 +65,24 @@ Vectorized computation:
 
 ---
 
-# 2. Initialization
+# 2. Periodic Planar Reference Engine
+
+The standalone modules under `cell_sphere_sim/planar/` provide:
+
+- `(N,2)` positions and unit polarities
+- rectangular periodic cKDTree neighbor search
+- minimum-image pair geometry
+- the same contact force magnitude helper as the sphere engine
+- planar CIL relaxation and rotational diffusion
+- unwrapped positions and collective diagnostics
+
+The planar step orchestration is intentionally separate from the spherical
+engine. State tables and the actual force formula are shared; geometry-specific
+projection and transport are not abstracted into a broad framework.
+
+---
+
+# 3. Initialization
 
 Overlap-safe rejection sampling using KD-tree.
 
@@ -76,7 +93,7 @@ Supports:
 
 ---
 
-# 3. Outputs
+# 4. Outputs
 
 ## Primary Output
 Pandas tracks-style DataFrame:
@@ -93,7 +110,7 @@ Division creates new track_id.
 
 ---
 
-# 4. GUI Layer (napari)
+# 5. Visualization
 
 Napari renders:
 - Tracks layer (primary visual)
@@ -102,9 +119,12 @@ Napari renders:
 
 Napari is currently the only 3D renderer.
 
+`examples/run_2d_sandbox.py` is a separate Matplotlib client of the planar
+engine. Its headless mode imports no Matplotlib code.
+
 ---
 
-# 5. Performance Expectations
+# 6. Performance Expectations
 
 Target scale:
 - 1k–3k cells typical
@@ -116,8 +136,8 @@ Primary bottlenecks:
 
 ---
 
-# 6. Future Extensions
+# 7. Future Extensions
 
-- PyVista docked renderer for true sphere glyphs
+- Planar parameter sweeps and sphere-reference comparisons
 - PDE reaction–diffusion field solver
-- Parameter sweep orchestration framework
+- Optional 3D rendering upgrades

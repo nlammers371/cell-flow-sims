@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "cell-sphere-sim"
 version = "0.1.0"
-description = "Cell dynamics simulator on a sphere (Phase 1)"
+description = "Cell mechanics simulations in periodic 2D and on a sphere"
 requires-python = ">=3.9"
 dependencies = [
   "numpy",
@@ -13,13 +13,12 @@ dependencies = [
   "pyyaml",
   "scipy",
   "tqdm",
-  "napari",
-  "qtpy",
-  "magicgui",
 ]
 
 [project.optional-dependencies]
 test = ["pytest"]
+sandbox = ["matplotlib"]
+napari = ["napari", "qtpy", "magicgui"]
 
 [project.entry-points."napari.manifest"]
 sim_viewer = "sim_viewer:napari.yaml"

@@ -12,6 +12,31 @@ class ContactMetrics:
     contact_dir_sum: np.ndarray
 
 
+def contact_force_magnitude(
+    d: np.ndarray,
+    R_i: np.ndarray,
+    R_j: np.ndarray,
+    w_i: np.ndarray,
+    w_j: np.ndarray,
+    k_rep: float,
+    alpha_dmin: float,
+    eps: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return the existing regularized contact force magnitude and distance.
+
+    This geometry-independent helper is shared by the spherical and planar
+    engines. Callers are responsible for selecting pairs with ``d < R_i+R_j``
+    and applying the appropriate direction vector.
+    """
+    sigma = R_i + R_j
+    d_min = alpha_dmin * sigma
+    d_eff = np.maximum(d, d_min + eps)
+    rep = k_rep * ((sigma - d_eff) / (d_eff - d_min)) ** 1.5
+    r_bar = 0.5 * (R_i + R_j)
+    adh = (w_i * w_j / r_bar) * (sigma - d_eff)
+    return rep - adh, d_eff
+
+
 def compute_contact_forces_and_metrics(
     x: np.ndarray,
     behavior: BehaviorParams,
@@ -52,14 +77,17 @@ def compute_contact_forces_and_metrics(
     d = d[contact_mask]
     sigma = sigma[contact_mask]
 
-    d_min = alpha_dmin * sigma
-    d_eff = np.maximum(d, d_min + eps)
+    f_mag, d_eff = contact_force_magnitude(
+        d,
+        R[i],
+        R[j],
+        w[i],
+        w[j],
+        k_rep,
+        alpha_dmin,
+        eps,
+    )
     n_hat = dvec / d_eff[:, None]
-
-    rep = k_rep * ((sigma - d_eff) / (d_eff - d_min)) ** 1.5
-    r_bar = 0.5 * (R[i] + R[j])
-    adh = (w[i] * w[j] / r_bar) * (sigma - d_eff)
-    f_mag = rep - adh
     f_vec = f_mag[:, None] * n_hat
 
     np.add.at(F_contact, i, f_vec)

@@ -1,0 +1,39 @@
+# Population and deterministic random initialization.
+initialization:
+  n_cells: 500
+  seed: 123
+  # Initial packing clearance only: required d >= factor * (R_i + R_j).
+  # This is deliberately distinct from the force regularizer alpha_dmin.
+  initial_min_separation_factor: 0.9
+  max_attempts_per_cell: 5000
+  # Fractions map in order to the state arrays below and must sum to one.
+  state_fractions: [1.0]
+
+# Periodic planar domain and numerical mechanics.
+simulation:
+  box_size: [32.0, 32.0]  # [Lx, Ly]; positions wrap into [0,Lx) x [0,Ly).
+  gamma_s: 1.0            # Overdamped drag coefficient.
+  k_rep: 2.0              # Repulsion strength in the preserved force law.
+  alpha_dmin: 0.2         # Force-law hard-core regularization; not init clearance.
+  eps: 1.0e-8             # Numerical zero guard.
+  dt: 0.01                # Explicit Euler timestep.
+  neighbor_radius_buffer: 0.1
+  record_interval: 1
+  division_enabled: false # Division is unsupported in the planar MVP.
+
+# State-dependent behavior tables. Add aligned entries for more states.
+states:
+  R: [0.35]               # Cell radius.
+  Fm: [1.0]               # Motility force magnitude.
+  Dr: [0.05]              # Rotational diffusion coefficient.
+  fcil: [2.0]             # Exponential CIL relaxation rate.
+  w: [0.2]                # Adhesion parameter.
+  lambda_div: [0.0]       # Retained state hook; unused by planar MVP.
+  tau_div: [1.0]          # Retained state hook; unused by planar MVP.
+
+# Interactive rendering defaults; mechanics do not depend on these values.
+sandbox:
+  steps_per_frame: 4
+  interval_ms: 30
+  show_polarity: true
+  arrow_stride: 10
