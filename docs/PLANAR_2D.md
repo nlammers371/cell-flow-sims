@@ -2,7 +2,11 @@
 
 The planar engine is a focused reference and exploration path for the existing
 cell-mechanics model. It changes geometry and boundaries, not the substantive
-motility, contact, adhesion, CIL, noise, or state assumptions.
+motility, contact, adhesion, CIL, noise, or state assumptions. This document is
+implementation-facing: equations are checked against the code, but the model
+has not yet been calibrated to a particular experiment or independently
+validated as a biological theory. Parameter dimensions and nondimensional
+groups are derived in [PARAMETER_SCALING.md](PARAMETER_SCALING.md).
 
 ## State and coordinates
 

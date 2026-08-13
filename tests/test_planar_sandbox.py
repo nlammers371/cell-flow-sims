@@ -4,6 +4,26 @@ from pathlib import Path
 import subprocess
 import sys
 
+from examples.run_2d_sandbox import PARAMETER_LABELS
+
+
+def test_parameter_labels_are_short_and_descriptive():
+    expected_keys = {
+        "n_cells",
+        "seed",
+        "motility",
+        "diffusion",
+        "cil_rate",
+        "adhesion",
+        "repulsion",
+        "hard_core",
+        "timestep",
+        "clearance",
+        "steps_per_frame",
+    }
+    assert set(PARAMETER_LABELS) == expected_keys
+    assert all(1 <= len(label.split()) <= 3 for label in PARAMETER_LABELS.values())
+
 
 def test_headless_planar_sandbox_succeeds():
     root = Path(__file__).resolve().parents[1]

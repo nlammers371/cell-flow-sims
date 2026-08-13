@@ -46,15 +46,22 @@ python examples/run_2d_sandbox.py
 ```
 
 It provides run/pause, single-step, deterministic reset, live collective
-metrics, polarity arrows, and controls for population size, seed, `Fm`, `Dr`,
-`fcil`, `w`, `k_rep`, `alpha_dmin`, timestep, initial clearance, and steps per
-frame. Load a different YAML file with `--config path/to/config.yaml`.
+metrics, polarity arrows, and readable controls for Cell Count, Random Seed,
+Motility Force (`Fm`), Rotational Diffusion (`Dr`), CIL Rate (`fcil`), Adhesion
+Strength (`w`), Repulsion Strength (`k_rep`), Hard-Core Ratio (`alpha_dmin`),
+Time Step, Initial Clearance, and Steps Per Frame. Load a different YAML file
+with `--config path/to/config.yaml`.
 
 Run the same backend without opening a window or importing Matplotlib:
 
 ```bash
 python examples/run_2d_sandbox.py --headless --steps 100
 ```
+
+For a reproducible data-loading workflow with two cell states, open
+`notebooks/two_state_data_simulation.ipynb`. It loads the bundled synthetic CSV,
+provides one editable parameter cell, runs the planar engine, and plots the
+initial/final populations and collective diagnostics.
 
 The command prints final diagnostics as JSON and exits. The documented default
 configuration is in `configs/sim_2d.yaml`.
@@ -120,7 +127,9 @@ Two similarly named parameters have intentionally different roles:
 - `initial_min_separation_factor` controls initial packing clearance only. Its
   conservative default of `0.9` avoids initializing near the force singularity.
 
-See `docs/PLANAR_2D.md` for equations, diagnostic definitions, and conventions.
+See `docs/PLANAR_2D.md` for equations, diagnostic definitions, and conventions,
+and `docs/PARAMETER_SCALING.md` for dimensions, nondimensional groups, and
+calibration caveats.
 
 ## Spherical backend and Napari UI
 

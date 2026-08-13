@@ -15,6 +15,22 @@ from cell_sphere_sim.planar import PlanarParams, PlanarSimulationEngine, init_ra
 
 DEFAULT_CONFIG = Path(__file__).resolve().parents[1] / "configs" / "sim_2d.yaml"
 
+# Human-readable GUI labels. Internal keys remain separate so display wording
+# can change without coupling the simulation callbacks to Matplotlib text.
+PARAMETER_LABELS = {
+    "n_cells": "Cell Count",
+    "seed": "Random Seed",
+    "motility": "Motility Force",
+    "diffusion": "Rotational Diffusion",
+    "cil_rate": "CIL Rate",
+    "adhesion": "Adhesion Strength",
+    "repulsion": "Repulsion Strength",
+    "hard_core": "Hard-Core Ratio",
+    "timestep": "Time Step",
+    "clearance": "Initial Clearance",
+    "steps_per_frame": "Steps Per Frame",
+}
+
 
 def load_config(path: str | Path) -> dict[str, Any]:
     with Path(path).open("r", encoding="utf-8") as handle:
@@ -166,43 +182,72 @@ def run_interactive(config: dict[str, Any]) -> None:
         color="black",
         visible=bool(view_cfg.get("show_polarity", True)),
     )
-    metrics_text = fig.text(0.70, 0.73, "", family="monospace", va="top")
+    # Metrics live below the plot, leaving the right panel exclusively for
+    # controls. This prevents long metric values from colliding with labels.
+    metrics_text = fig.text(0.06, 0.20, "", family="monospace", va="top")
+    fig.text(0.70, 0.94, "Parameters", fontsize=13, weight="bold", va="top")
 
     slider_specs = [
-        ("N (reset)", 10, 1500, init_cfg["n_cells"], 1),
-        ("seed (reset)", 0, 10000, init_cfg["seed"], 1),
-        ("Fm", 0.0, 3.0, config["states"]["Fm"][0], None),
-        ("Dr", 0.0, 1.0, config["states"]["Dr"][0], None),
-        ("fcil", 0.0, 10.0, config["states"]["fcil"][0], None),
-        ("w", 0.0, 2.0, config["states"]["w"][0], None),
-        ("k_rep", 0.0, 10.0, sim_cfg["k_rep"], None),
-        ("alpha_dmin", 0.0, 0.95, sim_cfg["alpha_dmin"], None),
-        ("dt", 0.001, 0.1, sim_cfg["dt"], None),
-        ("init clearance", 0.2, 1.2, init_cfg["initial_min_separation_factor"], None),
-        ("steps/frame", 1, 25, view_cfg.get("steps_per_frame", 4), 1),
+        ("n_cells", 10, 1500, init_cfg["n_cells"], 1),
+        ("seed", 0, 10000, init_cfg["seed"], 1),
+        ("motility", 0.0, 3.0, config["states"]["Fm"][0], None),
+        ("diffusion", 0.0, 1.0, config["states"]["Dr"][0], None),
+        ("cil_rate", 0.0, 10.0, config["states"]["fcil"][0], None),
+        ("adhesion", 0.0, 2.0, config["states"]["w"][0], None),
+        ("repulsion", 0.0, 10.0, sim_cfg["k_rep"], None),
+        ("hard_core", 0.0, 0.95, sim_cfg["alpha_dmin"], None),
+        ("timestep", 0.001, 0.1, sim_cfg["dt"], None),
+        ("clearance", 0.2, 1.2, init_cfg["initial_min_separation_factor"], None),
+        ("steps_per_frame", 1, 25, view_cfg.get("steps_per_frame", 4), 1),
     ]
     sliders: dict[str, Slider] = {}
-    for index, (label, low, high, value, step) in enumerate(slider_specs):
+    for index, (key, low, high, value, step) in enumerate(slider_specs):
         column = index // 6
         row = index % 6
-        slider_ax = fig.add_axes((0.70 + 0.15 * column, 0.62 - 0.065 * row, 0.13, 0.025))
-        sliders[label] = Slider(slider_ax, label, low, high, valinit=value, valstep=step)
+        slider_ax = fig.add_axes((0.70 + 0.155 * column, 0.79 - 0.09 * row, 0.12, 0.025))
+        slider = Slider(
+            slider_ax,
+            PARAMETER_LABELS[key],
+            low,
+            high,
+            valinit=value,
+            valstep=step,
+        )
+        # Matplotlib places labels beside sliders by default, where labels in
+        # the second column can overlap controls in the first. Put each label
+        # and value directly above its own track instead.
+        slider.label.set_position((0.0, 1.35))
+        slider.label.set_horizontalalignment("left")
+        slider.label.set_verticalalignment("bottom")
+        slider.label.set_fontsize(9)
+        slider.valtext.set_position((1.0, 1.35))
+        slider.valtext.set_horizontalalignment("right")
+        slider.valtext.set_verticalalignment("bottom")
+        slider.valtext.set_fontsize(8)
+        sliders[key] = slider
 
-    run_ax = fig.add_axes((0.70, 0.12, 0.10, 0.05))
-    step_ax = fig.add_axes((0.81, 0.12, 0.08, 0.05))
-    reset_ax = fig.add_axes((0.90, 0.12, 0.08, 0.05))
+    fig.text(
+        0.70,
+        0.27,
+        "Count, seed, and clearance apply on Reset.",
+        fontsize=8,
+        va="bottom",
+    )
+    run_ax = fig.add_axes((0.70, 0.17, 0.10, 0.05))
+    step_ax = fig.add_axes((0.81, 0.17, 0.08, 0.05))
+    reset_ax = fig.add_axes((0.90, 0.17, 0.08, 0.05))
     run_button = Button(run_ax, "Run")
     step_button = Button(step_ax, "Step")
     reset_button = Button(reset_ax, "Reset")
 
     def apply_live_parameters() -> None:
-        engine.state_table.Fm[:] = sliders["Fm"].val
-        engine.state_table.Dr[:] = sliders["Dr"].val
-        engine.state_table.fcil[:] = sliders["fcil"].val
-        engine.state_table.w[:] = sliders["w"].val
-        engine.params.k_rep = sliders["k_rep"].val
-        engine.params.alpha_dmin = sliders["alpha_dmin"].val
-        engine.params.dt = sliders["dt"].val
+        engine.state_table.Fm[:] = sliders["motility"].val
+        engine.state_table.Dr[:] = sliders["diffusion"].val
+        engine.state_table.fcil[:] = sliders["cil_rate"].val
+        engine.state_table.w[:] = sliders["adhesion"].val
+        engine.params.k_rep = sliders["repulsion"].val
+        engine.params.alpha_dmin = sliders["hard_core"].val
+        engine.params.dt = sliders["timestep"].val
 
     def update_artists() -> None:
         nonlocal arrows, arrow_indices
@@ -262,9 +307,9 @@ def run_interactive(config: dict[str, Any]) -> None:
         nonlocal engine, step_number, last_diag
         engine = build_engine(
             config,
-            n_cells=int(sliders["N (reset)"].val),
-            seed=int(sliders["seed (reset)"].val),
-            initial_min_separation_factor=sliders["init clearance"].val,
+            n_cells=int(sliders["n_cells"].val),
+            seed=int(sliders["seed"].val),
+            initial_min_separation_factor=sliders["clearance"].val,
         )
         step_number = 0
         last_diag = {}
@@ -274,7 +319,7 @@ def run_interactive(config: dict[str, Any]) -> None:
 
     def animate(_frame: int):
         if running:
-            advance(int(sliders["steps/frame"].val))
+            advance(int(sliders["steps_per_frame"].val))
         return cells, arrows, metrics_text
 
     run_button.on_clicked(toggle_run)
