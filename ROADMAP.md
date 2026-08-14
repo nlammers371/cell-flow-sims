@@ -19,6 +19,7 @@
 - Conservative heterogeneous initialization
 - Collective metrics and unwrapped displacement
 - Interactive/headless Matplotlib sandbox
+- State-specific unrestricted proliferation and lineage
 - Sphere/plane force parity and regression tests
 
 ## Phase 4 — Planar exploration and sphere validation (current priority)
@@ -26,6 +27,7 @@
 - Establish reference parameter sets for collective regimes
 - Add repeatable parameter sweep and result aggregation workflows
 - Profile 500–5,000-cell planar runs
+- Evaluate finite-duration dumbbell cytokinesis after the projection MVP
 - Compare planar results with low-curvature spherical simulations
 - Decide which diagnostics and output conventions should be shared
 

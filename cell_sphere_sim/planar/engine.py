@@ -9,6 +9,8 @@ import numpy as np
 from ..forces import ContactMetrics
 from ..neighbors import interaction_radius
 from ..state import BehaviorParams, StateTable, lookup_behavior
+from .constraints import project_seeded_overlaps_periodic
+from .division import apply_planar_divisions
 from .forces import compute_planar_contact_forces_and_metrics
 from .metrics import largest_cluster_fraction, nematic_order_2d, polarization_magnitude
 from .neighbors import candidate_pairs_periodic, minimum_image_displacement, validate_box_size
@@ -25,6 +27,10 @@ class PlanarParams:
     record_interval: int = 1
     neighbor_radius_buffer: float = 0.1
     division_enabled: bool = False
+    division_separation_factor: float = 1.0
+    division_projection_enabled: bool = True
+    division_projection_tolerance: float = 1e-8
+    division_projection_max_iterations: int = 500
 
 
 PlanarCellUpdateFn = Callable[
@@ -89,14 +95,13 @@ class PlanarSimulationEngine:
         params: PlanarParams,
         cell_update: PlanarCellUpdateFn | None = None,
         rng: np.random.Generator | None = None,
+        track_id: np.ndarray | None = None,
+        parent_id: np.ndarray | None = None,
     ) -> None:
         _validate_state_table(state_table)
         self.box_size = validate_box_size(params.box_size)
         self.params = params
         self._validate_params()
-        if params.division_enabled:
-            raise NotImplementedError("cell division is not supported by PlanarSimulationEngine")
-
         points = np.asarray(x, dtype=float)
         polarity = np.asarray(p, dtype=float)
         states = np.asarray(state_id, dtype=np.int32)
@@ -129,7 +134,27 @@ class PlanarSimulationEngine:
         self.state_table = state_table
         self.cell_update = cell_update or default_planar_cell_update
         self.rng = rng if rng is not None else np.random.default_rng(0)
-        self.track_id = np.arange(points.shape[0], dtype=np.int64)
+        if track_id is None:
+            track_ids = np.arange(points.shape[0], dtype=np.int64)
+        else:
+            track_ids = np.asarray(track_id, dtype=np.int64)
+            if track_ids.shape != (points.shape[0],):
+                raise ValueError("track_id must have shape (N,)")
+            if np.unique(track_ids).size != track_ids.size:
+                raise ValueError("track_id values must be unique")
+        if parent_id is None:
+            parent_ids = np.full(points.shape[0], -1, dtype=np.int64)
+        else:
+            parent_ids = np.asarray(parent_id, dtype=np.int64)
+            if parent_ids.shape != (points.shape[0],):
+                raise ValueError("parent_id must have shape (N,)")
+
+        self.track_id = track_ids.copy()
+        self.parent_id = parent_ids.copy()
+        self.next_track_id = int(np.max(self.track_id)) + 1 if self.track_id.size else 0
+        self.paused_until = np.zeros(points.shape[0], dtype=float)
+        self.last_division_projection_displacement = np.zeros_like(points)
+        self.total_divisions = 0
         self.v = np.zeros_like(points)
         self.contact_metrics = ContactMetrics(
             contact_count=np.zeros(points.shape[0], dtype=int),
@@ -155,6 +180,18 @@ class PlanarSimulationEngine:
             raise ValueError("record_interval must be positive")
         if not np.isfinite(params.neighbor_radius_buffer) or params.neighbor_radius_buffer < 0.0:
             raise ValueError("neighbor_radius_buffer must be finite and non-negative")
+        if (
+            not np.isfinite(params.division_separation_factor)
+            or params.division_separation_factor <= 0.0
+        ):
+            raise ValueError("division_separation_factor must be finite and positive")
+        if (
+            not np.isfinite(params.division_projection_tolerance)
+            or params.division_projection_tolerance < 0.0
+        ):
+            raise ValueError("division_projection_tolerance must be finite and non-negative")
+        if params.division_projection_max_iterations <= 0:
+            raise ValueError("division_projection_max_iterations must be positive")
 
     def step(self, t: float) -> dict[str, float | int]:
         params = self.params
@@ -193,7 +230,8 @@ class PlanarSimulationEngine:
         contact_j = j_idx[contact_mask]
         contact_distances = pair_distances[contact_mask]
 
-        self.v = (behavior.Fm[:, None] * self.p + force) / params.gamma_s
+        gate = (t >= self.paused_until).astype(float)
+        self.v = (gate[:, None] * behavior.Fm[:, None] * self.p + force) / params.gamma_s
         displacement = dt * self.v
         self.x_unwrapped = self.x_unwrapped + displacement
         self.x = np.mod(self.x + displacement, self.box_size)
@@ -226,6 +264,83 @@ class PlanarSimulationEngine:
 
         speed = np.linalg.norm(self.v, axis=1)
         squared_displacement = np.sum((self.x_unwrapped - self.x_unwrapped_initial) ** 2, axis=1)
+        largest_cluster = largest_cluster_fraction(self.x.shape[0], contact_i, contact_j)
+
+        n_divisions = 0
+        projection_iterations = 0
+        projection_cells_moved = 0
+        projection_initial_overlap = 0.0
+        projection_residual_overlap = 0.0
+        projection_max_displacement = 0.0
+        projection_rms_displacement = 0.0
+        self.last_division_projection_displacement = np.zeros_like(self.x)
+        if params.division_enabled:
+            previous_n = self.x.shape[0]
+            initial_positions = self.x_unwrapped_initial
+            (
+                self.x,
+                self.x_unwrapped,
+                self.p,
+                self.state_id,
+                self.state_vars,
+                self.paused_until,
+                self.track_id,
+                self.parent_id,
+                self.next_track_id,
+                div_idx,
+            ) = apply_planar_divisions(
+                self.x,
+                self.x_unwrapped,
+                self.p,
+                self.state_id,
+                self.state_vars,
+                self.paused_until,
+                self.track_id,
+                self.parent_id,
+                self.next_track_id,
+                t,
+                behavior,
+                self.box_size,
+                params.division_separation_factor,
+                self.rng,
+                dt,
+            )
+            n_divisions = int(div_idx.size)
+            if n_divisions:
+                appended = np.arange(previous_n, self.x.shape[0])
+                self.last_division_projection_displacement = np.zeros_like(self.x)
+                if params.division_projection_enabled:
+                    projection_seeds = np.concatenate((div_idx, appended))
+                    self.x, self.x_unwrapped, projection = project_seeded_overlaps_periodic(
+                        self.x,
+                        self.x_unwrapped,
+                        self.state_table.R[self.state_id],
+                        projection_seeds,
+                        self.box_size,
+                        tolerance=params.division_projection_tolerance,
+                        max_iterations=params.division_projection_max_iterations,
+                        eps=params.eps,
+                    )
+                    projection_iterations = projection.iterations
+                    projection_cells_moved = projection.n_cells_moved
+                    projection_initial_overlap = projection.initial_max_overlap
+                    projection_residual_overlap = projection.final_max_overlap
+                    projection_max_displacement = projection.max_displacement
+                    projection_rms_displacement = projection.rms_displacement
+                    self.last_division_projection_displacement = projection.displacement.copy()
+                new_initial_positions = np.empty_like(self.x_unwrapped)
+                new_initial_positions[:previous_n] = initial_positions
+                new_initial_positions[div_idx] = self.x_unwrapped[div_idx]
+                new_initial_positions[appended] = self.x_unwrapped[appended]
+                self.x_unwrapped_initial = new_initial_positions
+
+                self.v[div_idx] = 0.0
+                self.v = np.vstack([self.v, np.zeros((n_divisions, 2), dtype=self.v.dtype)])
+                self.contact_metrics = ContactMetrics(
+                    contact_count=np.zeros(self.x.shape[0], dtype=int),
+                    contact_dir_sum=np.zeros_like(self.x),
+                )
+                self.total_divisions += n_divisions
 
         return {
             "n_cells": int(self.x.shape[0]),
@@ -240,12 +355,18 @@ class PlanarSimulationEngine:
             ),
             "polarization": polarization_magnitude(self.p),
             "nematic_order": nematic_order_2d(self.p),
-            "largest_cluster_fraction": largest_cluster_fraction(
-                self.x.shape[0], contact_i, contact_j
-            ),
+            "largest_cluster_fraction": largest_cluster,
             "mean_squared_displacement": (
                 float(np.mean(squared_displacement)) if squared_displacement.size else 0.0
             ),
+            "n_divisions": n_divisions,
+            "total_divisions": self.total_divisions,
+            "division_projection_iterations": projection_iterations,
+            "division_projection_cells_moved": projection_cells_moved,
+            "division_projection_initial_overlap": projection_initial_overlap,
+            "division_projection_residual_overlap": projection_residual_overlap,
+            "division_projection_max_displacement": projection_max_displacement,
+            "division_projection_rms_displacement": projection_rms_displacement,
         }
 
     def run(
@@ -278,6 +399,7 @@ class PlanarSimulationEngine:
                     state_vars=self.state_vars,
                     v=self.v,
                     track_id=self.track_id,
+                    parent_id=self.parent_id,
                 )
             if callback is not None:
                 callback(step_index, t, diag)

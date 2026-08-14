@@ -28,8 +28,10 @@ Let $[L]$, $[T]$, and $[F]$ denote length, time, and force.
 | CIL rate | `fcil` | $[T]^{-1}$ | Polarity relaxation rate |
 | Rotational diffusion | `Dr` | $[T]^{-1}$ | Angular variance rate; radians are dimensionless |
 | Timestep | `dt` | $[T]$ | Outer integration interval |
-| Division rate | `lambda_div` | $[T]^{-1}$ | Retained state parameter; unused in planar MVP |
-| Division pause | `tau_div` | $[T]$ | Retained state parameter; unused in planar MVP |
+| Division rate | `lambda_div` | $[T]^{-1}$ | State-specific unrestricted division hazard |
+| Division pause | `tau_div` | $[T]$ | State-specific post-division motility pause |
+| Division separation | `division_separation_factor` | dimensionless | Daughter separation divided by $R_a+R_b$ |
+| Projection tolerance | `division_projection_tolerance` | $[L]$ | Allowed residual birth-component overlap |
 | Hard-core ratio | `alpha_dmin` | dimensionless | Sets $d_{\min}/\sigma$ |
 | Initial clearance | `initial_min_separation_factor` | dimensionless | Initialization only |
 
@@ -79,9 +81,9 @@ d_{ij}^{\mathrm{eff}} &= \max\!\left(\lVert\mathbf{d}_{ij}\rVert,
 Here $\mathbf{d}_{ij}$ points from cell $j$ to cell $i$: it is
 $\mathbf{x}_i-\mathbf{x}_j$ on the sphere and the corresponding minimum-image
 displacement in the periodic plane. The pair force is zero when
-$\lVert\mathbf{d}_{ij}\rVert\geq\sigma_{ij}$. The motility gate $g_i$ is zero
-during a spherical-model division pause and one otherwise; the planar model
-has $g_i=1$ because division is not implemented there.
+$\lVert\mathbf{d}_{ij}\rVert\geq\sigma_{ij}$. In both engines, the motility
+gate $g_i$ is zero during a post-division pause and one otherwise. This gate
+does not disable contact forces or further division events.
 
 With $\mathbf{v}_i=d\mathbf{x}_i/dt$, the code advances positions by explicit
 Euler, followed by the geometry constraint:
@@ -156,6 +158,10 @@ C_i &= f_i^{\mathrm{CIL}}T_0
 && \text{(CIL rate)}, \\
 D_i &= D_{r,i}T_0
 && \text{(diffusion rate)}, \\
+\Lambda_i &= \lambda_i^{\mathrm{div}}T_0
+&& \text{(division rate)}, \\
+\Theta_i &= \frac{\tau_i^{\mathrm{div}}}{T_0}
+&& \text{(division pause)}, \\
 h &= \frac{\Delta t}{T_0}
    = \frac{\Delta t\,k_{\mathrm{rep}}}{\gamma_s\sigma_0}
 && \text{(dimensionless step)}, \\
@@ -164,9 +170,9 @@ a &= \alpha_{\mathrm{dmin}}
 \end{aligned}
 ```
 
-These, plus geometry ($R_i/\sigma_0$, box size, density, and state fractions),
-control dynamically similar runs. The raw parameters are **not** individually
-dimensionless in the current code.
+These, plus division placement, geometry ($R_i/\sigma_0$, box size, density,
+and state fractions), control dynamically similar runs. The raw parameters are
+**not** individually dimensionless in the current code.
 
 For equal or unequal radii, $\bar r=\sigma/2$. Writing normalized distance
 $q=d/\sigma$, the pair force becomes
@@ -202,12 +208,39 @@ v_m &= \frac{F^{\mathrm m}}{\gamma_s}
 && \text{(CIL during one diameter crossing)}, \\
 \frac{w_iw_j}{F_i^{\mathrm m}}
   &= \frac{A_{ij}}{M_i}
-&& \text{(adhesion relative to motility force)}.
+&& \text{(adhesion relative to motility force)}, \\
+\lambda_i^{\mathrm{div}}\tau_i^{\mathrm{div}}
+  &= \Lambda_i\Theta_i
+&& \text{(expected division hazard accumulated during a pause)}.
 \end{aligned}
 ```
 
 The last ratio compares force scales only. Actual adhesive force also depends
 on overlap through $2(1-q)$.
+
+## Proliferation scaling
+
+The implementation treats `lambda_div` as a continuous-time Poisson hazard and
+uses `1 - exp(-lambda_div * dt)` per timestep rather than the small-step
+approximation `lambda_div * dt`. With no state changes, deaths, or regulation,
+
+```math
+E[N_i(t)] = N_i(0)e^{\lambda_i^{\mathrm{div}}t},
+\qquad
+t_{2,i} = \frac{\ln 2}{\lambda_i^{\mathrm{div}}}.
+```
+
+Thus changing the mechanics reference scale while preserving similarity also
+requires holding $\Lambda_i=\lambda_i^{\mathrm{div}}T_0$ and
+$\Theta_i=\tau_i^{\mathrm{div}}/T_0$ fixed. The placement factor is already
+dimensionless; at its configured value of one, equal-radius daughter centers
+are separated by one contact diameter.
+
+The optional post-division projection is not a physical timescale or force. It
+is a zero-time configuration correction, and its displacements therefore do
+not enter the reported velocity. The maximum and RMS projection displacement
+should be audited relative to $\sigma_0$; values that are not small indicate
+that division events are substantially rearranging the local configuration.
 
 ## Numerical scaling and current limitation
 
@@ -219,11 +252,12 @@ current force regularization limits division by zero but does not impose a
 geometric non-crossing constraint. This is a known implementation weakness,
 not a valid physical prediction.
 
-The proposed correction is an explicit core-separation constraint plus
-displacement-triggered substeps only when a tentative move could tunnel through
-a core. Unlike routine stiffness-based substepping, normal steps retain one
-force evaluation. A smooth finite force regularization may still be useful, but
-a force cap alone cannot guarantee non-crossing at finite $\Delta t$.
+Division insertion now has an event-local geometric projection, but ordinary
+mechanics steps still have no core-separation constraint. A future global
+correction would require an explicit core constraint plus
+displacement-triggered substeps when a tentative move could tunnel through a
+core. A smooth finite force regularization may still be useful, but a force cap
+alone cannot guarantee non-crossing at finite $\Delta t$.
 
 ## Calibration implications
 
@@ -236,7 +270,8 @@ A physical calibration should state at minimum:
 4. contact-separation or force data used to identify $A_{ij}$,
    $k_{\mathrm{rep}}$, and $\alpha_{\mathrm{dmin}}$;
 5. a CIL reorientation timescale used to constrain $f_i^{\mathrm{CIL}}$;
-6. sensitivity to $\Delta t$ and any hard-core numerical controls.
+6. measured division hazards or doubling times and post-division pause times;
+7. sensitivity to $\Delta t$ and any hard-core numerical controls.
 
 Without such information, many raw parameter sets are related by scaling and
 cannot be uniquely identified from trajectories alone.

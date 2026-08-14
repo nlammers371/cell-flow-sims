@@ -1,6 +1,6 @@
 # Project Status — Cell Flow Simulations
 
-_Last updated: 2026-08-10_
+_Last updated: 2026-08-13_
 
 ## Current version
 
@@ -32,6 +32,8 @@ mechanics before expanding spherical visualization or adding new biology.
 - [x] Overdamped motion, planar CIL, and rotational diffusion
 - [x] Unwrapped trajectories and collective diagnostics
 - [x] Interactive and headless Matplotlib sandbox
+- [x] State-specific unrestricted proliferation and lineage tracking
+- [x] Auditable event-local daughter overlap projection
 - [x] Focused planar regression and integration tests
 - [x] Backend, sandbox, and Napari dependency separation
 
@@ -39,7 +41,9 @@ mechanics before expanding spherical visualization or adding new biology.
 
 ### Planar backend
 
-- [ ] Division and PDE field coupling are not implemented.
+- [ ] PDE field coupling is not implemented.
+- [ ] Proliferation has no cell-cycle stages, crowding regulation, or death.
+- [ ] Division projection is instantaneous; finite-duration cytokinesis is deferred.
 - [ ] The existing vector CIL relaxation has an exact-antipode edge case.
 - [ ] The Pandas track store is still 3D-specific; `TrajectoryStore` is
   dimension-agnostic.

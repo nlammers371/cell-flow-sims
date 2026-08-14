@@ -13,6 +13,8 @@ class TrajectoryStore:
         self.p = []
         self.state_id = []
         self.state_vars = []
+        self.track_id = []
+        self.parent_id = []
 
     def append(
         self,
@@ -21,6 +23,8 @@ class TrajectoryStore:
         p: np.ndarray,
         state_id: np.ndarray,
         state_vars: np.ndarray,
+        track_id: np.ndarray | None = None,
+        parent_id: np.ndarray | None = None,
         **_: object,
     ) -> None:
         self.t.append(float(t))
@@ -28,6 +32,8 @@ class TrajectoryStore:
         self.p.append(np.array(p, copy=True))
         self.state_id.append(np.array(state_id, copy=True))
         self.state_vars.append(np.array(state_vars, copy=True))
+        self.track_id.append(None if track_id is None else np.array(track_id, copy=True))
+        self.parent_id.append(None if parent_id is None else np.array(parent_id, copy=True))
 
     def to_dict(self) -> dict:
         return {
@@ -36,6 +42,8 @@ class TrajectoryStore:
             "p": self.p,
             "state_id": self.state_id,
             "state_vars": self.state_vars,
+            "track_id": self.track_id,
+            "parent_id": self.parent_id,
         }
 
 

@@ -20,6 +20,10 @@ def test_parameter_labels_are_short_and_descriptive():
         "timestep",
         "clearance",
         "steps_per_frame",
+        "division_rate_0",
+        "division_pause_0",
+        "division_rate_1",
+        "division_pause_1",
     }
     assert set(PARAMETER_LABELS) == expected_keys
     assert all(1 <= len(label.split()) <= 3 for label in PARAMETER_LABELS.values())

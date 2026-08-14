@@ -74,11 +74,14 @@ The standalone modules under `cell_sphere_sim/planar/` provide:
 - minimum-image pair geometry
 - the same contact force magnitude helper as the sphere engine
 - planar CIL relaxation and rotational diffusion
+- state-specific unrestricted division, motility pauses, and lineage IDs
+- event-local periodic hard-disk projection after daughter insertion
 - unwrapped positions and collective diagnostics
 
 The planar step orchestration is intentionally separate from the spherical
-engine. State tables and the actual force formula are shared; geometry-specific
-projection and transport are not abstracted into a broad framework.
+engine. State tables, division sampling, and the actual force formula are
+shared; geometry-specific placement, projection, and transport are not
+abstracted into a broad framework.
 
 ---
 

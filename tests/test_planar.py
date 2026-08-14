@@ -9,6 +9,7 @@ from cell_sphere_sim.planar import (
     compute_planar_contact_forces_and_metrics,
     init_random_periodic,
     minimum_image_displacement,
+    project_seeded_overlaps_periodic,
 )
 from cell_sphere_sim.state import BehaviorParams, StateTable, lookup_behavior
 
@@ -99,7 +100,7 @@ def test_planar_contact_force_is_zero_outside_contact_range():
 def test_planar_force_magnitude_matches_spherical_model():
     state_table = _state_table(
         radii=(0.4, 0.6),
-        motility=(0.0, 0.0),
+        motility=(1.0, 1.0),
         diffusion=(0.0, 0.0),
         fcil=(0.0, 0.0),
         adhesion=(0.2, 0.3),
@@ -253,16 +254,204 @@ def test_moderate_density_simulation_stays_finite():
     assert 0.0 < diagnostics[-1]["largest_cluster_fraction"] <= 1.0
 
 
-def test_planar_division_request_is_explicitly_rejected():
-    table = _state_table()
+def test_planar_division_is_state_specific_symmetric_and_lineage_aware():
+    table = _state_table(
+        radii=(0.4, 0.6),
+        motility=(1.0, 1.0),
+        diffusion=(0.0, 0.0),
+        fcil=(0.0, 0.0),
+        adhesion=(0.0, 0.0),
+    )
+    table.lambda_div[:] = [1000.0, 0.0]
+    table.tau_div[:] = [0.7, 1.2]
     params = _params()
     params.division_enabled = True
-    with np.testing.assert_raises_regex(NotImplementedError, "division"):
-        PlanarSimulationEngine(
-            np.array([[1.0, 1.0]]),
-            np.array([[1.0, 0.0]]),
-            np.array([0], dtype=np.int32),
-            np.zeros((1, 0)),
-            table,
-            params,
+    engine = PlanarSimulationEngine(
+        np.array([[0.1, 5.0], [5.0, 5.0]]),
+        np.array([[1.0, 0.0], [0.0, 1.0]]),
+        np.array([0, 1], dtype=np.int32),
+        np.array([[3.0], [4.0]]),
+        table,
+        params,
+        rng=np.random.default_rng(41),
+        track_id=np.array([10, 20], dtype=np.int64),
+    )
+
+    diagnostics = engine.step(0.0)
+
+    assert diagnostics["n_divisions"] == 1
+    assert diagnostics["total_divisions"] == 1
+    assert diagnostics["n_cells"] == 3
+    assert np.array_equal(engine.state_id, [0, 1, 0])
+    assert np.array_equal(engine.state_vars[:, 0], [3.0, 4.0, 3.0])
+    assert np.array_equal(engine.track_id, [21, 20, 22])
+    assert np.array_equal(engine.parent_id, [10, -1, 10])
+    assert np.allclose(engine.p[[0, 2]], [[1.0, 0.0], [1.0, 0.0]])
+    assert np.allclose(engine.paused_until[[0, 2]], 0.01 + 0.7)
+
+    daughter_displacement = minimum_image_displacement(engine.x[0], engine.x[2], (10.0, 10.0))
+    assert np.isclose(np.linalg.norm(daughter_displacement), 2.0 * table.R[0])
+    assert np.allclose(0.5 * (engine.x_unwrapped[0] + engine.x_unwrapped[2]), [0.11, 5.0])
+    assert np.all((engine.x >= 0.0) & (engine.x < 10.0))
+
+
+def test_seeded_projection_propagates_without_moving_unrelated_overlaps():
+    x = np.array(
+        [
+            [1.0, 1.0],
+            [1.5, 1.0],
+            [2.2, 1.0],
+            [7.0, 7.0],
+            [7.5, 7.0],
+        ]
+    )
+    projected, unwrapped, diagnostics = project_seeded_overlaps_periodic(
+        x,
+        x.copy(),
+        np.full(5, 0.5),
+        np.array([0]),
+        (10.0, 10.0),
+    )
+
+    assert diagnostics.n_cells_moved == 3
+    assert diagnostics.initial_max_overlap == 0.5
+    assert diagnostics.final_max_overlap <= 1e-8
+    assert diagnostics.max_displacement > 0.0
+    assert np.allclose(np.sum(unwrapped[:3], axis=0), np.sum(x[:3], axis=0))
+    assert np.allclose(projected[3:], x[3:])
+    assert np.isclose(np.linalg.norm(projected[3] - projected[4]), 0.5)
+    for i, j in ((0, 1), (1, 2)):
+        distance = np.linalg.norm(
+            minimum_image_displacement(projected[i], projected[j], (10.0, 10.0))
         )
+        assert distance >= 1.0 - 1e-8
+
+
+def test_seeded_projection_uses_periodic_minimum_image():
+    x = np.array([[0.1, 5.0], [9.7, 5.0]])
+    projected, unwrapped, diagnostics = project_seeded_overlaps_periodic(
+        x,
+        x.copy(),
+        np.array([0.3, 0.3]),
+        np.array([0]),
+        (10.0, 10.0),
+    )
+
+    separation = np.linalg.norm(
+        minimum_image_displacement(projected[0], projected[1], (10.0, 10.0))
+    )
+    assert separation >= 0.6 - 1e-8
+    assert np.allclose(np.sum(unwrapped, axis=0), np.sum(x, axis=0))
+    assert diagnostics.n_cells_moved == 2
+
+
+def test_division_projection_shoves_neighbors_without_creating_velocity_spikes():
+    radius = 0.4
+    angles = np.linspace(0.0, 2.0 * np.pi, 6, endpoint=False)
+    x = np.vstack(
+        (
+            [5.0, 5.0],
+            np.column_stack(
+                (
+                    5.0 + 2.0 * radius * np.cos(angles),
+                    5.0 + 2.0 * radius * np.sin(angles),
+                )
+            ),
+        )
+    )
+    table = _state_table(
+        radii=(radius, radius),
+        motility=(1.0, 1.0),
+        diffusion=(0.0, 0.0),
+        fcil=(0.0, 0.0),
+        adhesion=(0.0, 0.0),
+    )
+    table.lambda_div[:] = [1000.0, 0.0]
+    params = _params()
+    params.k_rep = 0.0
+    params.division_enabled = True
+    engine = PlanarSimulationEngine(
+        x,
+        np.tile([1.0, 0.0], (7, 1)),
+        np.array([0, 1, 1, 1, 1, 1, 1], dtype=np.int32),
+        np.zeros((7, 0)),
+        table,
+        params,
+        rng=np.random.default_rng(41),
+    )
+
+    diagnostics = engine.step(0.0)
+
+    assert diagnostics["n_divisions"] == 1
+    assert diagnostics["division_projection_cells_moved"] > 2
+    assert diagnostics["division_projection_max_displacement"] > 0.0
+    assert diagnostics["division_projection_residual_overlap"] <= 1e-8
+    assert np.allclose(engine.v[1:7], [1.0, 0.0])
+    assert np.allclose(engine.v[[0, 7]], 0.0)
+    assert np.any(
+        np.linalg.norm(engine.last_division_projection_displacement[1:7], axis=1) > 0.0
+    )
+    assert np.allclose(np.sum(engine.last_division_projection_displacement, axis=0), 0.0)
+    radii = table.R[engine.state_id]
+    for i in range(engine.x.shape[0]):
+        displacement = minimum_image_displacement(
+            engine.x[i], engine.x[i + 1 :], engine.box_size
+        )
+        distances = np.linalg.norm(displacement, axis=1)
+        assert np.all(distances >= radii[i] + radii[i + 1 :] - 1e-8)
+
+
+def test_division_pause_gates_motility_for_full_tau():
+    table = _state_table(
+        radii=(0.4,),
+        motility=(1.0,),
+        diffusion=(0.0,),
+        fcil=(0.0,),
+        adhesion=(0.0,),
+    )
+    table.lambda_div[:] = 1000.0
+    table.tau_div[:] = 0.5
+    params = _params(dt=0.05)
+    params.k_rep = 0.0
+    params.division_enabled = True
+    engine = PlanarSimulationEngine(
+        np.array([[5.0, 5.0]]),
+        np.array([[1.0, 0.0]]),
+        np.array([0], dtype=np.int32),
+        np.zeros((1, 0)),
+        table,
+        params,
+        rng=np.random.default_rng(42),
+    )
+
+    engine.step(0.0)
+    table.lambda_div[:] = 0.0
+    birth_positions = engine.x_unwrapped.copy()
+    engine.step(0.05)
+    assert np.allclose(engine.x_unwrapped, birth_positions)
+
+    engine.step(0.55)
+    assert np.allclose(engine.x_unwrapped[:, 0], birth_positions[:, 0] + 0.05)
+
+
+def test_division_run_store_records_dynamic_lineage_arrays():
+    table = _state_table(motility=(1.0,), diffusion=(0.0,), fcil=(0.0,), adhesion=(0.0,))
+    table.lambda_div[:] = 1000.0
+    params = _params()
+    params.division_enabled = True
+    engine = PlanarSimulationEngine(
+        np.array([[5.0, 5.0]]),
+        np.array([[1.0, 0.0]]),
+        np.array([0], dtype=np.int32),
+        np.zeros((1, 0)),
+        table,
+        params,
+        rng=np.random.default_rng(43),
+    )
+    store = TrajectoryStore()
+    engine.run(2, store=store)
+
+    assert [positions.shape[0] for positions in store.x] == [2, 4]
+    assert [ids.shape[0] for ids in store.track_id] == [2, 4]
+    assert [ids.shape[0] for ids in store.parent_id] == [2, 4]
+    assert len(np.unique(store.track_id[-1])) == 4

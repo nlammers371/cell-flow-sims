@@ -49,8 +49,16 @@ It provides run/pause, single-step, deterministic reset, live collective
 metrics, polarity arrows, and readable controls for Cell Count, Random Seed,
 Motility Force (`Fm`), Rotational Diffusion (`Dr`), CIL Rate (`fcil`), Adhesion
 Strength (`w`), Repulsion Strength (`k_rep`), Hard-Core Ratio (`alpha_dmin`),
-Time Step, Initial Clearance, and Steps Per Frame. Load a different YAML file
-with `--config path/to/config.yaml`.
+Time Step, Initial Clearance, Steps Per Frame, and each state's Division Rate
+(`lambda_div`) and Division Pause (`tau_div`). Division controls update live;
+cell count, seed, and clearance apply on reset. Load a different YAML file with
+`--config path/to/config.yaml`.
+
+After daughter insertion, the overlap-connected component reached from the
+daughters is projected instantaneously to non-overlapping disk positions. The
+GUI reports the number of shoved cells and maximum event displacement. This
+correction is not included in cell velocity; see `docs/PLANAR_2D.md` for its
+algorithm and interpretation.
 
 Run the same backend without opening a window or importing Matplotlib:
 
@@ -60,8 +68,9 @@ python examples/run_2d_sandbox.py --headless --steps 100
 
 For a reproducible data-loading workflow with two cell states, open
 `notebooks/two_state_data_simulation.ipynb`. It loads the bundled synthetic CSV,
-provides one editable parameter cell, runs the planar engine, and plots the
-initial/final populations and collective diagnostics.
+provides one editable parameter cell (including the two state-specific
+proliferation rates), runs the planar engine, and plots the initial/final
+populations and collective diagnostics.
 
 The command prints final diagnostics as JSON and exits. The documented default
 configuration is in `configs/sim_2d.yaml`.
@@ -154,9 +163,12 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest -q
 
 ## Current limitations
 
-The planar MVP has no division or PDE field coupling; requesting planar
-division raises `NotImplementedError`. It does not add alignment or change any
-biological interaction law. The vector-based CIL relaxation retains the
-spherical implementation's narrow exact-antipode degeneracy. The existing
-Pandas track store is 3D-specific; the dimension-agnostic `TrajectoryStore`
-works with planar arrays.
+Planar division is an unrestricted state-specific Poisson birth process: it has
+no cell-cycle stages, growth, death, crowding suppression, or population cap.
+The planar engine has no PDE field coupling and does not add alignment or
+change any biological interaction law. Its force regularization is not yet a
+geometric non-crossing constraint during ordinary mechanics steps; only
+division insertion has event-local projection. The vector-based CIL relaxation
+retains the spherical implementation's narrow exact-antipode degeneracy. The
+existing Pandas track store is 3D-specific; the dimension-agnostic
+`TrajectoryStore` works with variable-length planar arrays and lineage IDs.

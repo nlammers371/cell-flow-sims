@@ -7,7 +7,7 @@ initialization:
   initial_min_separation_factor: 0.9
   max_attempts_per_cell: 5000
   # Fractions map in order to the state arrays below and must sum to one.
-  state_fractions: [1.0]
+  state_fractions: [0.5, 0.5]
 
 # Periodic planar domain and numerical mechanics.
 simulation:
@@ -19,17 +19,23 @@ simulation:
   dt: 0.01                # Explicit Euler timestep.
   neighbor_radius_buffer: 0.1
   record_interval: 1
-  division_enabled: false # Division is unsupported in the planar MVP.
+  division_enabled: true
+  # Daughters are placed symmetrically at center distance factor * (2 * R).
+  division_separation_factor: 1.0
+  # Event-local, instantaneous hard-disk shoving after daughter insertion.
+  division_projection_enabled: true
+  division_projection_tolerance: 1.0e-8
+  division_projection_max_iterations: 500
 
 # State-dependent behavior tables. Add aligned entries for more states.
 states:
-  R: [0.35]               # Cell radius.
-  Fm: [1.0]               # Motility force magnitude.
-  Dr: [0.05]              # Rotational diffusion coefficient.
-  fcil: [2.0]             # Exponential CIL relaxation rate.
-  w: [0.2]                # Adhesion parameter.
-  lambda_div: [0.0]       # Retained state hook; unused by planar MVP.
-  tau_div: [1.0]          # Retained state hook; unused by planar MVP.
+  R: [0.35, 0.35]         # Cell radius by state.
+  Fm: [1.0, 1.0]          # Motility force magnitude by state.
+  Dr: [0.05, 0.05]        # Rotational diffusion coefficient by state.
+  fcil: [2.0, 2.0]        # Exponential CIL relaxation rate by state.
+  w: [0.2, 0.2]           # Adhesion parameter by state.
+  lambda_div: [0.0, 0.0]  # Unrestricted division hazard by state.
+  tau_div: [1.0, 1.0]     # Post-division motility pause by state.
 
 # Interactive rendering defaults; mechanics do not depend on these values.
 sandbox:

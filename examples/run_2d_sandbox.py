@@ -29,6 +29,10 @@ PARAMETER_LABELS = {
     "timestep": "Time Step",
     "clearance": "Initial Clearance",
     "steps_per_frame": "Steps Per Frame",
+    "division_rate_0": "S0 Division Rate",
+    "division_pause_0": "S0 Division Pause",
+    "division_rate_1": "S1 Division Rate",
+    "division_pause_1": "S1 Division Pause",
 }
 
 
@@ -90,6 +94,14 @@ def build_engine(
         record_interval=int(sim_cfg.get("record_interval", 1)),
         neighbor_radius_buffer=float(sim_cfg.get("neighbor_radius_buffer", 0.1)),
         division_enabled=bool(sim_cfg.get("division_enabled", False)),
+        division_separation_factor=float(sim_cfg.get("division_separation_factor", 1.0)),
+        division_projection_enabled=bool(sim_cfg.get("division_projection_enabled", True)),
+        division_projection_tolerance=float(
+            sim_cfg.get("division_projection_tolerance", 1e-8)
+        ),
+        division_projection_max_iterations=int(
+            sim_cfg.get("division_projection_max_iterations", 500)
+        ),
     )
     return PlanarSimulationEngine(
         x,
@@ -187,24 +199,47 @@ def run_interactive(config: dict[str, Any]) -> None:
     metrics_text = fig.text(0.06, 0.20, "", family="monospace", va="top")
     fig.text(0.70, 0.94, "Parameters", fontsize=13, weight="bold", va="top")
 
-    slider_specs = [
+    first_column = [
         ("n_cells", 10, 1500, init_cfg["n_cells"], 1),
         ("seed", 0, 10000, init_cfg["seed"], 1),
         ("motility", 0.0, 3.0, config["states"]["Fm"][0], None),
         ("diffusion", 0.0, 1.0, config["states"]["Dr"][0], None),
         ("cil_rate", 0.0, 10.0, config["states"]["fcil"][0], None),
         ("adhesion", 0.0, 2.0, config["states"]["w"][0], None),
+    ]
+    second_column = [
         ("repulsion", 0.0, 10.0, sim_cfg["k_rep"], None),
         ("hard_core", 0.0, 0.95, sim_cfg["alpha_dmin"], None),
         ("timestep", 0.001, 0.1, sim_cfg["dt"], None),
         ("clearance", 0.2, 1.2, init_cfg["initial_min_separation_factor"], None),
         ("steps_per_frame", 1, 25, view_cfg.get("steps_per_frame", 4), 1),
     ]
+    division_rates = config["states"]["lambda_div"]
+    division_pauses = config["states"]["tau_div"]
+    if engine.state_table.R.size >= 1:
+        first_column.extend(
+            [
+                ("division_rate_0", 0.0, 1.0, division_rates[0], None),
+                ("division_pause_0", 0.0, 10.0, division_pauses[0], None),
+            ]
+        )
+    if engine.state_table.R.size >= 2:
+        second_column.extend(
+            [
+                ("division_rate_1", 0.0, 1.0, division_rates[1], None),
+                ("division_pause_1", 0.0, 10.0, division_pauses[1], None),
+            ]
+        )
+    slider_specs = first_column + second_column
     sliders: dict[str, Slider] = {}
     for index, (key, low, high, value, step) in enumerate(slider_specs):
-        column = index // 6
-        row = index % 6
-        slider_ax = fig.add_axes((0.70 + 0.155 * column, 0.79 - 0.09 * row, 0.12, 0.025))
+        if index < len(first_column):
+            column = 0
+            row = index
+        else:
+            column = 1
+            row = index - len(first_column)
+        slider_ax = fig.add_axes((0.70 + 0.155 * column, 0.82 - 0.07 * row, 0.12, 0.025))
         slider = Slider(
             slider_ax,
             PARAMETER_LABELS[key],
@@ -248,6 +283,12 @@ def run_interactive(config: dict[str, Any]) -> None:
         engine.params.k_rep = sliders["repulsion"].val
         engine.params.alpha_dmin = sliders["hard_core"].val
         engine.params.dt = sliders["timestep"].val
+        if "division_rate_0" in sliders:
+            engine.state_table.lambda_div[0] = sliders["division_rate_0"].val
+            engine.state_table.tau_div[0] = sliders["division_pause_0"].val
+        if "division_rate_1" in sliders:
+            engine.state_table.lambda_div[1] = sliders["division_rate_1"].val
+            engine.state_table.tau_div[1] = sliders["division_pause_1"].val
 
     def update_artists() -> None:
         nonlocal arrows, arrow_indices
@@ -283,15 +324,32 @@ def run_interactive(config: dict[str, Any]) -> None:
                 f"polarization: {last_diag['polarization']:.4g}\n"
                 f"nematic order: {last_diag['nematic_order']:.4g}\n"
                 f"largest cluster: {last_diag['largest_cluster_fraction']:.4g}\n"
+                f"divisions: {last_diag['n_divisions']} "
+                f"(total {last_diag['total_divisions']})\n"
+                f"division shove: {last_diag['division_projection_cells_moved']} cells, "
+                f"max {last_diag['division_projection_max_displacement']:.4g}\n"
                 f"MSD: {last_diag['mean_squared_displacement']:.4g}"
             )
 
     def advance(count: int = 1) -> None:
         nonlocal step_number, last_diag
         apply_live_parameters()
+        frame_diagnostics = []
         for _ in range(count):
-            last_diag = engine.step(step_number * float(engine.params.dt))
+            frame_diagnostics.append(engine.step(step_number * float(engine.params.dt)))
             step_number += 1
+        if frame_diagnostics:
+            last_diag = dict(frame_diagnostics[-1])
+            last_diag["n_divisions"] = sum(
+                int(item["n_divisions"]) for item in frame_diagnostics
+            )
+            last_diag["division_projection_cells_moved"] = sum(
+                int(item["division_projection_cells_moved"]) for item in frame_diagnostics
+            )
+            last_diag["division_projection_max_displacement"] = max(
+                float(item["division_projection_max_displacement"])
+                for item in frame_diagnostics
+            )
         update_artists()
 
     def toggle_run(_event: object) -> None:
