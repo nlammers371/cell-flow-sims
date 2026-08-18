@@ -31,6 +31,8 @@ class PlanarParams:
     division_projection_enabled: bool = True
     division_projection_tolerance: float = 1e-8
     division_projection_max_iterations: int = 500
+    division_projection_failure_policy: str = "reject"
+    division_projection_max_displacement_factor: float | None = 2.0
 
 
 PlanarCellUpdateFn = Callable[
@@ -155,6 +157,7 @@ class PlanarSimulationEngine:
         self.paused_until = np.zeros(points.shape[0], dtype=float)
         self.last_division_projection_displacement = np.zeros_like(points)
         self.total_divisions = 0
+        self.total_rejected_divisions = 0
         self.v = np.zeros_like(points)
         self.contact_metrics = ContactMetrics(
             contact_count=np.zeros(points.shape[0], dtype=int),
@@ -192,6 +195,18 @@ class PlanarSimulationEngine:
             raise ValueError("division_projection_tolerance must be finite and non-negative")
         if params.division_projection_max_iterations <= 0:
             raise ValueError("division_projection_max_iterations must be positive")
+        if params.division_projection_failure_policy not in {"reject", "raise"}:
+            raise ValueError(
+                "division_projection_failure_policy must be 'reject' or 'raise'"
+            )
+        max_projection_factor = params.division_projection_max_displacement_factor
+        if max_projection_factor is not None and (
+            not np.isfinite(max_projection_factor) or max_projection_factor <= 0.0
+        ):
+            raise ValueError(
+                "division_projection_max_displacement_factor must be None or "
+                "finite and positive"
+            )
 
     def step(self, t: float) -> dict[str, float | int]:
         params = self.params
@@ -267,6 +282,8 @@ class PlanarSimulationEngine:
         largest_cluster = largest_cluster_fraction(self.x.shape[0], contact_i, contact_j)
 
         n_divisions = 0
+        n_division_attempts = 0
+        n_rejected_divisions = 0
         projection_iterations = 0
         projection_cells_moved = 0
         projection_initial_overlap = 0.0
@@ -278,15 +295,15 @@ class PlanarSimulationEngine:
             previous_n = self.x.shape[0]
             initial_positions = self.x_unwrapped_initial
             (
-                self.x,
-                self.x_unwrapped,
-                self.p,
-                self.state_id,
-                self.state_vars,
-                self.paused_until,
-                self.track_id,
-                self.parent_id,
-                self.next_track_id,
+                divided_x,
+                divided_x_unwrapped,
+                divided_p,
+                divided_state_id,
+                divided_state_vars,
+                divided_paused_until,
+                divided_track_id,
+                divided_parent_id,
+                divided_next_track_id,
                 div_idx,
             ) = apply_planar_divisions(
                 self.x,
@@ -305,42 +322,89 @@ class PlanarSimulationEngine:
                 self.rng,
                 dt,
             )
-            n_divisions = int(div_idx.size)
-            if n_divisions:
-                appended = np.arange(previous_n, self.x.shape[0])
-                self.last_division_projection_displacement = np.zeros_like(self.x)
+            n_division_attempts = int(div_idx.size)
+            if n_division_attempts:
+                appended = np.arange(previous_n, divided_x.shape[0])
+                projection_displacement = np.zeros_like(divided_x)
+                projection = None
+                projection_error = None
                 if params.division_projection_enabled:
                     projection_seeds = np.concatenate((div_idx, appended))
-                    self.x, self.x_unwrapped, projection = project_seeded_overlaps_periodic(
-                        self.x,
-                        self.x_unwrapped,
-                        self.state_table.R[self.state_id],
-                        projection_seeds,
-                        self.box_size,
-                        tolerance=params.division_projection_tolerance,
-                        max_iterations=params.division_projection_max_iterations,
-                        eps=params.eps,
-                    )
+                    try:
+                        (
+                            divided_x,
+                            divided_x_unwrapped,
+                            projection,
+                        ) = project_seeded_overlaps_periodic(
+                            divided_x,
+                            divided_x_unwrapped,
+                            self.state_table.R[divided_state_id],
+                            projection_seeds,
+                            self.box_size,
+                            tolerance=params.division_projection_tolerance,
+                            max_iterations=params.division_projection_max_iterations,
+                            eps=params.eps,
+                        )
+                    except RuntimeError as exc:
+                        projection_error = exc
+
+                if projection is not None:
                     projection_iterations = projection.iterations
                     projection_cells_moved = projection.n_cells_moved
                     projection_initial_overlap = projection.initial_max_overlap
                     projection_residual_overlap = projection.final_max_overlap
                     projection_max_displacement = projection.max_displacement
                     projection_rms_displacement = projection.rms_displacement
-                    self.last_division_projection_displacement = projection.displacement.copy()
-                new_initial_positions = np.empty_like(self.x_unwrapped)
-                new_initial_positions[:previous_n] = initial_positions
-                new_initial_positions[div_idx] = self.x_unwrapped[div_idx]
-                new_initial_positions[appended] = self.x_unwrapped[appended]
-                self.x_unwrapped_initial = new_initial_positions
+                    projection_displacement = projection.displacement.copy()
+                    max_factor = params.division_projection_max_displacement_factor
+                    if max_factor is not None:
+                        allowed_displacement = max_factor * float(
+                            np.max(behavior.R[div_idx])
+                        )
+                        if projection.max_displacement > allowed_displacement:
+                            projection_error = RuntimeError(
+                                "division overlap projection required an implausibly "
+                                f"large displacement ({projection.max_displacement:.6g} > "
+                                f"{allowed_displacement:.6g})"
+                            )
 
-                self.v[div_idx] = 0.0
-                self.v = np.vstack([self.v, np.zeros((n_divisions, 2), dtype=self.v.dtype)])
-                self.contact_metrics = ContactMetrics(
-                    contact_count=np.zeros(self.x.shape[0], dtype=int),
-                    contact_dir_sum=np.zeros_like(self.x),
-                )
-                self.total_divisions += n_divisions
+                if projection_error is not None:
+                    if params.division_projection_failure_policy == "raise":
+                        raise projection_error
+                    n_rejected_divisions = n_division_attempts
+                    self.total_rejected_divisions += n_rejected_divisions
+                else:
+                    # Commit all daughter-related arrays together only after the
+                    # geometry check succeeds. A rejected division therefore
+                    # cannot leave partial daughters or wrapped edge artifacts.
+                    self.x = divided_x
+                    self.x_unwrapped = divided_x_unwrapped
+                    self.p = divided_p
+                    self.state_id = divided_state_id
+                    self.state_vars = divided_state_vars
+                    self.paused_until = divided_paused_until
+                    self.track_id = divided_track_id
+                    self.parent_id = divided_parent_id
+                    self.next_track_id = divided_next_track_id
+                    self.last_division_projection_displacement = projection_displacement
+                    n_divisions = n_division_attempts
+
+                if n_divisions:
+                    new_initial_positions = np.empty_like(self.x_unwrapped)
+                    new_initial_positions[:previous_n] = initial_positions
+                    new_initial_positions[div_idx] = self.x_unwrapped[div_idx]
+                    new_initial_positions[appended] = self.x_unwrapped[appended]
+                    self.x_unwrapped_initial = new_initial_positions
+
+                    self.v[div_idx] = 0.0
+                    self.v = np.vstack(
+                        [self.v, np.zeros((n_divisions, 2), dtype=self.v.dtype)]
+                    )
+                    self.contact_metrics = ContactMetrics(
+                        contact_count=np.zeros(self.x.shape[0], dtype=int),
+                        contact_dir_sum=np.zeros_like(self.x),
+                    )
+                    self.total_divisions += n_divisions
 
         return {
             "n_cells": int(self.x.shape[0]),
@@ -360,7 +424,10 @@ class PlanarSimulationEngine:
                 float(np.mean(squared_displacement)) if squared_displacement.size else 0.0
             ),
             "n_divisions": n_divisions,
+            "n_division_attempts": n_division_attempts,
+            "n_rejected_divisions": n_rejected_divisions,
             "total_divisions": self.total_divisions,
+            "total_rejected_divisions": self.total_rejected_divisions,
             "division_projection_iterations": projection_iterations,
             "division_projection_cells_moved": projection_cells_moved,
             "division_projection_initial_overlap": projection_initial_overlap,

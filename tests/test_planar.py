@@ -401,6 +401,57 @@ def test_division_projection_shoves_neighbors_without_creating_velocity_spikes()
         assert np.all(distances >= radii[i] + radii[i + 1 :] - 1e-8)
 
 
+def test_failed_division_projection_rejects_event_without_partial_daughters():
+    radius = 0.4
+    angles = np.linspace(0.0, 2.0 * np.pi, 6, endpoint=False)
+    x = np.vstack(
+        (
+            [5.0, 5.0],
+            np.column_stack(
+                (
+                    5.0 + 2.0 * radius * np.cos(angles),
+                    5.0 + 2.0 * radius * np.sin(angles),
+                )
+            ),
+        )
+    )
+    table = _state_table(
+        radii=(radius, radius),
+        motility=(0.0, 0.0),
+        diffusion=(0.0, 0.0),
+        fcil=(0.0, 0.0),
+        adhesion=(0.0, 0.0),
+    )
+    table.lambda_div[:] = [1000.0, 0.0]
+    params = _params()
+    params.k_rep = 0.0
+    params.division_enabled = True
+    params.division_projection_max_iterations = 1
+    engine = PlanarSimulationEngine(
+        x,
+        np.tile([1.0, 0.0], (7, 1)),
+        np.array([0, 1, 1, 1, 1, 1, 1], dtype=np.int32),
+        np.zeros((7, 0)),
+        table,
+        params,
+        rng=np.random.default_rng(41),
+    )
+    original_track_ids = engine.track_id.copy()
+    original_next_track_id = engine.next_track_id
+
+    diagnostics = engine.step(0.0)
+
+    assert diagnostics["n_division_attempts"] == 1
+    assert diagnostics["n_rejected_divisions"] == 1
+    assert diagnostics["n_divisions"] == 0
+    assert diagnostics["total_rejected_divisions"] == 1
+    assert diagnostics["total_divisions"] == 0
+    assert engine.x.shape == (7, 2)
+    assert np.allclose(engine.x, x)
+    assert np.array_equal(engine.track_id, original_track_ids)
+    assert engine.next_track_id == original_next_track_id
+
+
 def test_division_pause_gates_motility_for_full_tau():
     table = _state_table(
         radii=(0.4,),
