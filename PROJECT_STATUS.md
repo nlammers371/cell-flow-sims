@@ -1,10 +1,10 @@
 # Project Status — Cell Flow Simulations
 
-_Last updated: 2026-08-13_
+_Last updated: 2026-08-18_
 
 ## Current version
 
-Backend Revision 2 with periodic planar MVP.
+Backend Revision 2 with periodic planar MVP and continuum workbench.
 
 ## Current focus
 
@@ -37,11 +37,25 @@ mechanics before expanding spherical visualization or adding new biology.
 - [x] Focused planar regression and integration tests
 - [x] Backend, sandbox, and Napari dependency separation
 
+### Continuum workbench
+
+- [x] Shared float64 periodic FFT core with 2/3 de-aliasing
+- [x] Passive and Active Model B with exact passive-limit parity
+- [x] Density–polarization MIPS and Keller–Segel autochemotaxis
+- [x] Dynamic and quasistatic signal modes
+- [x] Registry-driven interactive and headless route
+- [x] Mass, structure, cluster, energy, and model-specific diagnostics
+- [x] Adaptive invalid-step rejection without material density clipping
+- [x] Reproducible arrays, diagnostics, image, metadata, and animation export
+- [x] Shared-initial-field comparison and operational-map sweeps
+- [x] Saved per-model regression trajectories and focused acceptance tests
+- [x] Auditable equations, scaling, assumptions, and limitations guide
+
 ## Known limitations
 
 ### Planar backend
 
-- [ ] PDE field coupling is not implemented.
+- [ ] Coupling the discrete cell agents to PDE fields is not implemented.
 - [ ] Proliferation has no cell-cycle stages, crowding regulation, or death.
 - [ ] Division projection is instantaneous; finite-duration cytokinesis is deferred.
 - [ ] The existing vector CIL relaxation has an exact-antipode edge case.

@@ -85,7 +85,29 @@ abstracted into a broad framework.
 
 ---
 
-# 3. Initialization
+# 3. Continuum Workbench
+
+`cell_sphere_sim/continuum/` is independent of both cell-agent engines:
+
+- `base.py`, `config.py`, and `registry.py` define the model contract and
+  declarative controls/presets.
+- `numerics/` owns the cached periodic FFT grid, differential operators,
+  de-aliasing mask, and conserved flux noise.
+- `models/` implements Passive Model B, Active Model B,
+  density–polarization MIPS, and Keller–Segel autochemotaxis.
+- `engine.py` separates PDE stepping from render cadence and handles retry,
+  positivity, deterministic energy descent, and diagnostic history.
+- `diagnostics.py`, `export.py`, `comparison.py`, and `sweep.py` are shared by
+  the GUI and headless workflows.
+- `workbench.py` is a registry-driven Matplotlib client; the models do not
+  import Matplotlib.
+
+The continuum and agent paths intentionally share no state semantics: continuum
+pixels are coarse-grained fields rather than cells.
+
+---
+
+# 4. Initialization
 
 Overlap-safe rejection sampling using KD-tree.
 
@@ -96,7 +118,7 @@ Supports:
 
 ---
 
-# 4. Outputs
+# 5. Outputs
 
 ## Primary Output
 Pandas tracks-style DataFrame:
@@ -113,7 +135,7 @@ Division creates new track_id.
 
 ---
 
-# 5. Visualization
+# 6. Visualization
 
 Napari renders:
 - Tracks layer (primary visual)
@@ -125,9 +147,13 @@ Napari is currently the only 3D renderer.
 `examples/run_2d_sandbox.py` is a separate Matplotlib client of the planar
 engine. Its headless mode imports no Matplotlib code.
 
+`examples/run_continuum_workbench.py` is the clearly separated continuum route.
+Its controls are generated from `MODEL_REGISTRY`, and its headless mode likewise
+imports no Matplotlib code.
+
 ---
 
-# 6. Performance Expectations
+# 7. Performance Expectations
 
 Target scale:
 - 1k–3k cells typical
@@ -139,7 +165,7 @@ Primary bottlenecks:
 
 ---
 
-# 7. Future Extensions
+# 8. Future Extensions
 
 - Planar parameter sweeps and sphere-reference comparisons
 - PDE reaction–diffusion field solver

@@ -140,6 +140,42 @@ See `docs/PLANAR_2D.md` for equations, diagnostic definitions, and conventions,
 and `docs/PARAMETER_SCALING.md` for dimensions, nondimensional groups, and
 calibration caveats.
 
+## Continuum workbench
+
+The continuum route is a separate periodic-field workbench beside the discrete
+cell sandbox. It includes Passive Model B, Active Model B, a mechanistic
+density–polarization MIPS closure, and Keller–Segel autochemotaxis:
+
+```bash
+conda activate cell-flow-sims
+python examples/run_continuum_workbench.py
+```
+
+The interactive view provides model/preset selection, non-overlapping short
+parameter labels, run/pause/step/reset controls, live primary and secondary
+fields, vector overlays where applicable, diagnostics, and reproducible export.
+Numerical parameter changes affect the next integration step. Signal mode and
+other controls that change field semantics reset the run. The Setup dialog
+contains reset-required domain, seed, initial-noise, and droplet controls.
+
+Run without Matplotlib or a display:
+
+```bash
+python examples/run_continuum_workbench.py \
+  --headless --model model_b --preset spinodal --steps 1000
+```
+
+Two-parameter/seed sweeps are available through
+`examples/run_continuum_sweep.py`; its no-argument defaults form a small
+mean-density/free-speed MIPS operational map. The default workbench and sweep
+configurations are `configs/continuum.yaml` and
+`configs/continuum_mips_sweep.yaml`.
+
+The complete downloadable model audit—including equations, assumptions,
+parameter scaling relations, initialization from measured fields, numerics,
+limitations, validation, and primary references—is in
+[`docs/CONTINUUM_MODELS.md`](docs/CONTINUUM_MODELS.md).
+
 ## Spherical backend and Napari UI
 
 The original spherical example remains available:
@@ -172,3 +208,5 @@ division insertion has event-local projection. The vector-based CIL relaxation
 retains the spherical implementation's narrow exact-antipode degeneracy. The
 existing Pandas track store is 3D-specific; the dimension-agnostic
 `TrajectoryStore` works with variable-length planar arrays and lineage IDs.
+The continuum models are coarse-grained periodic PDEs and are not coupled to the
+discrete planar or spherical cell engines.
